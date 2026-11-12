@@ -157,31 +157,82 @@ try {
     check(/hola desde la prueba/.test(output), "RAMFS escribe y lee datos nuevos");
 
     /* --- escritorio gráfico --- */
-    serial = "";
-    emulator.serial0_send("gui\n");
-    await waitFor(/Escritorio iniciado/, 15000, "el escritorio gráfico");
     const vga = emulator.v86.cpu.devices.vga;
-    check(!!vga.svga_enabled && vga.svga_width === 800 && vga.svga_height === 600,
-        "el adaptador entra en modo 800x600x8 lineal");
-    check(vga.graphical_mode === true, "la salida de vídeo es gráfica, no texto");
+    check(vga.graphical_mode === true && vga.svga_enabled &&
+        vga.svga_width === 800 && vga.svga_height === 600,
+        "el sistema arranca directamente en modo 800x600x8");
 
-    /* el ratón PS/2 mueve el puntero (IRQ12) */
-    emulator.bus.send("mouse-delta", [40, 20]);
-    emulator.bus.send("mouse-delta", [30, 10]);
+    output = await command("win", /ventanas: 1[\s\S]*Terminal[\s\S]*saveiro:\/\$ /, "win");
+    check(/Terminal/.test(output), "el escritorio arranca con la ventana Terminal");
+
+    const warp = async (x, y) => {
+        serial = "";
+        emulator.serial0_send(`\u0001mouseto ${x} ${y}\n`);
+        await waitFor(/saveiro:\/\$ /, 6000, "mouseto");
+    };
+    const clickAt = async (x, y) => {
+        await warp(x, y);
+        emulator.bus.send("mouse-click", [true, false, false]);
+        await new Promise((resolve) => setTimeout(resolve, 90));
+        emulator.bus.send("mouse-click", [false, false, false]);
+        await new Promise((resolve) => setTimeout(resolve, 220));
+    };
+    const doubleClickAt = async (x, y) => {
+        await warp(x, y);
+        for (let n = 0; n < 2; n++) {
+            emulator.bus.send("mouse-click", [true, false, false]);
+            await new Promise((resolve) => setTimeout(resolve, 90));
+            emulator.bus.send("mouse-click", [false, false, false]);
+            await new Promise((resolve) => setTimeout(resolve, n === 0 ? 110 : 260));
+        }
+    };
+
+    /* menu de inicio -> calculadora */
+    await clickAt(40, 585);
+    await clickAt(60, 504);
+    output = await command("win", /Calculadora[\s\S]*saveiro:\/\$ /, "win calculadora");
+    check(/Calculadora/.test(output), "el menu de inicio abre la Calculadora");
+
+    /* arrastrar la ventana por la barra de titulo */
+    await warp(600, 158);
+    emulator.bus.send("mouse-click", [true, false, false]);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    emulator.bus.send("mouse-delta", [-60, -40]);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    emulator.bus.send("mouse-delta", [-60, -40]);
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    emulator.bus.send("mouse-click", [false, false, false]);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    output = await command("win", /Calculadora[\s\S]*saveiro:\/\$ /, "win tras arrastrar");
+    const dragged = output.match(/Calculadora\s+230x300 en (\d+),(\d+)/);
+    check(!!dragged && (Number(dragged[1]) !== 520 || Number(dragged[2]) !== 150),
+        `las ventanas se arrastran por la barra de titulo (${dragged ? dragged[1] + "," + dragged[2] : "sin datos"})`);
+
+    /* minimizar y recuperar desde la barra de tareas */
+    await clickAt(687, 49);
+    output = await command("win", /minimizada[\s\S]*saveiro:\/\$ /, "win minimizada");
+    check(/Terminal[\s\S]*minimizada/.test(output), "el boton minimizar oculta la ventana");
+    await clickAt(120, 585);
+    output = await command("win", /Terminal[\s\S]*visible[\s\S]*saveiro:\/\$ /, "win restaurada");
+    check(/Terminal[\s\S]*visible/.test(output), "la barra de tareas restaura la ventana");
+
+    /* archivos -> doble clic -> editor -> escribir -> se guarda en el RAMFS */
+    await clickAt(42, 120);
+    await doubleClickAt(600, 120);
+    output = await command("win", /Editor[\s\S]*saveiro:\/\$ /, "win editor");
+    check(/Editor/.test(output), "el doble clic en un archivo abre el editor");
+
+    emulator.keyboard_send_text("prueba gui", 40);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await clickAt(679, 89);            /* cerrar el editor: guarda solo */
     await new Promise((resolve) => setTimeout(resolve, 400));
-    output = await command("mouse", /raton: detectado, paquetes: \d+[\s\S]*saveiro:\/\$ /, "mouse");
-    check(/raton: detectado, paquetes: [1-9]\d*/.test(output), "el ratón PS/2 entrega paquetes por IRQ12");
-
-    check(serial.includes("saveiro:/$"), "el terminal de la ventana sigue atendiendo la shell");
-
-    /* ESC vuelve al modo texto */
     serial = "";
-    emulator.bus.send("keyboard-code", 0x01);
-    await waitFor(/Saliste del escritorio/, 8000, "la vuelta al modo texto");
-    check(vga.graphical_mode === false, "ESC devuelve la consola al modo texto");
+    emulator.serial0_send("cat README\n");
+    await waitFor(/saveiro:\/\$ /, 8000, "cat README");
+    check(/prueba gui/.test(serial), "el editor guarda el texto en el RAMFS");
 
-    output = await command("ticks", /ticks: \d+[\s\S]*saveiro:\/\$ /, "ticks tras salir");
-    check(/PIT a 100 Hz/.test(output), "la shell sigue viva tras cerrar el escritorio");
+    output = await command("win", /ventanas: \d+[\s\S]*saveiro:\/\$ /, "win final");
+    check(!/Editor/.test(output), "cerrar una ventana la quita del escritorio");
 
     check(!/PANIC|EXCEPCION/.test(serial), "no hubo pánicos ni excepciones");
 

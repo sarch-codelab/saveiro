@@ -11,6 +11,9 @@
 
 static gfx_info_t info;
 static bool ready;
+
+static bool clip_on;
+static int clip_x0, clip_y0, clip_x1, clip_y1;
 static uint32_t pci_slot = 0xFFFF;
 
 /* ------------------------------------------------------------------ */
@@ -209,9 +212,32 @@ void gfx_clear(uint8_t color)
 /* Dibujo                                                              */
 /* ------------------------------------------------------------------ */
 
+void gfx_set_clip(int x, int y, int w, int h)
+{
+    clip_x0 = x < 0 ? 0 : x;
+    clip_y0 = y < 0 ? 0 : y;
+    clip_x1 = x + w > info.width ? info.width : x + w;
+    clip_y1 = y + h > info.height ? info.height : y + h;
+
+    if (clip_x1 < clip_x0)
+        clip_x1 = clip_x0;
+    if (clip_y1 < clip_y0)
+        clip_y1 = clip_y0;
+
+    clip_on = true;
+}
+
+void gfx_clip_off(void)
+{
+    clip_on = false;
+}
+
 void gfx_pixel(int x, int y, uint8_t color)
 {
     if (!ready || x < 0 || y < 0 || x >= info.width || y >= info.height)
+        return;
+
+    if (clip_on && (x < clip_x0 || x >= clip_x1 || y < clip_y0 || y >= clip_y1))
         return;
 
     info.back[y * info.pitch + x] = color;
@@ -236,6 +262,14 @@ void gfx_fill(int x, int y, int w, int h, uint8_t color)
     if (y < 0) { h += y; y = 0; }
     if (x + w > info.width) w = info.width - x;
     if (y + h > info.height) h = info.height - y;
+
+    if (clip_on) {
+        if (x < clip_x0) { w -= clip_x0 - x; x = clip_x0; }
+        if (y < clip_y0) { h -= clip_y0 - y; y = clip_y0; }
+        if (x + w > clip_x1) w = clip_x1 - x;
+        if (y + h > clip_y1) h = clip_y1 - y;
+    }
+
     if (w <= 0 || h <= 0)
         return;
 
@@ -350,6 +384,14 @@ void gfx_flush(int x, int y, int w, int h)
     if (y < 0) { h += y; y = 0; }
     if (x + w > info.width) w = info.width - x;
     if (y + h > info.height) h = info.height - y;
+
+    if (clip_on) {
+        if (x < clip_x0) { w -= clip_x0 - x; x = clip_x0; }
+        if (y < clip_y0) { h -= clip_y0 - y; y = clip_y0; }
+        if (x + w > clip_x1) w = clip_x1 - x;
+        if (y + h > clip_y1) h = clip_y1 - y;
+    }
+
     if (w <= 0 || h <= 0)
         return;
 

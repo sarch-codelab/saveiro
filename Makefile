@@ -75,15 +75,17 @@ run: $(BUILD)/saveiro.img
 
 # Capturas de pantalla para la documentación (requiere Pillow)
 shots: $(BUILD)/saveiro.img v86-deps
-	node tools/screenshot.mjs $(BUILD)/screen-help.json help
-	python3 tools/render-screen.py $(BUILD)/screen-help.json $(BUILD)/help.png
-	node tools/screenshot.mjs $(BUILD)/screen-test.json test
-	python3 tools/render-screen.py $(BUILD)/screen-test.json $(BUILD)/test.png
+	node tools/gui-shot.mjs $(BUILD)/shot-comandos comandos
+	python3 tools/render-framebuffer.py $(BUILD)/shot-comandos.raw $(BUILD)/shot-comandos-palette.json docs/comandos.png
+	node tools/gui-shot.mjs $(BUILD)/shot-test autopruebas
+	python3 tools/render-framebuffer.py $(BUILD)/shot-test.raw $(BUILD)/shot-test-palette.json docs/autopruebas.png
 
-# Captura del escritorio gráfico (framebuffer 800x600x8)
+# Capturas del escritorio: portada y calculadora
 shots-gui: $(BUILD)/saveiro.img v86-deps
-	node tools/gui-shot.mjs $(BUILD)/gui-screen
-	python3 tools/render-framebuffer.py $(BUILD)/gui-screen.raw $(BUILD)/gui-screen-palette.json docs/escritorio.png
+	node tools/gui-shot.mjs $(BUILD)/shot-desktop escritorio
+	python3 tools/render-framebuffer.py $(BUILD)/shot-desktop.raw $(BUILD)/shot-desktop-palette.json docs/escritorio.png
+	node tools/gui-shot.mjs $(BUILD)/shot-calc calculadora
+	python3 tools/render-framebuffer.py $(BUILD)/shot-calc.raw $(BUILD)/shot-calc-palette.json docs/calculadora.png
 
 test: $(BUILD)/saveiro.img v86-deps
 	node tools/v86-check.mjs

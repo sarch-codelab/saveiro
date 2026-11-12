@@ -16,6 +16,7 @@
 #include <rtc.h>
 #include <task.h>
 #include <shell.h>
+#include <gui.h>
 
 static void log_ok(const char *text)
 {
@@ -67,7 +68,10 @@ void kmain(boot_info_t *bi)
     sti();
     log_ok("interrupciones activadas; el temporizador ya corre");
 
-    kprintf("\nArranque completo. Bienvenido.\n");
+    /* Escritorio grafico: la shell vive dentro de una ventana. Si la
+     * tarjeta no ofrece framebuffer lineal, se queda el modo texto. */
+    if (gui_boot() < 0)
+        kprintf("\n[ !! ] sin framebuffer SVGA: seguimos en modo texto\n");
 
     shell_run();
 }

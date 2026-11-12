@@ -61,6 +61,10 @@ int  gfx_text_alpha(int x, int y, const char *text, uint8_t fg);
 int  gfx_text_width(const char *text);
 
 void gfx_flush(int x, int y, int w, int h);
+
+/* Recorte: todo lo que se dibuje fuera del rectangulo se ignora. */
+void gfx_set_clip(int x, int y, int w, int h);
+void gfx_clip_off(void);
 void gfx_flush_all(void);
 
 void gfx_cursor_draw(int x, int y);

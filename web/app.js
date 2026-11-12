@@ -1,25 +1,23 @@
 "use strict";
 
+/* Arranca SaveiroOS dentro de v86 y deja que el escritorio ocupe la pantalla.
+ * No hay panel de comandos: todo se usa con el ratón y el teclado dentro de la
+ * propia máquina. */
 (function () {
     const overlay = document.getElementById("bootOverlay");
     const bootSub = document.getElementById("bootSub");
-    const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
-    const metaState = document.getElementById("metaState");
-    const uptimeEl = document.getElementById("uptime");
-    const terminalPanel = document.getElementById("terminalPanel");
+    const statusDot = document.getElementById("statusDot");
+    const screen = document.getElementById("screen");
 
     let emulator = null;
     let booted = false;
-    let startedAt = 0;
-    let timerId = 0;
 
     function setStatus(text, mode) {
         statusText.textContent = text;
-        metaState.textContent = text;
-        statusPill.classList.remove("ready", "error");
+        statusDot.classList.remove("ready", "error");
         if (mode) {
-            statusPill.classList.add(mode);
+            statusDot.classList.add(mode);
         }
     }
 
@@ -38,32 +36,12 @@
         }
         booted = true;
         setStatus("en línea", "ready");
-        startedAt = Date.now();
         hideOverlay();
-    }
-
-    function startUptime() {
-        if (timerId) {
-            clearInterval(timerId);
-        }
-        uptimeEl.textContent = "00:00";
-        timerId = setInterval(function () {
-            if (!startedAt) {
-                return;
-            }
-            const total = Math.floor((Date.now() - startedAt) / 1000);
-            const mm = String(Math.floor(total / 60)).padStart(2, "0");
-            const ss = String(total % 60).padStart(2, "0");
-            uptimeEl.textContent = mm + ":" + ss;
-        }, 1000);
     }
 
     function fail(message) {
         setStatus("error", "error");
-        bootSub.textContent = message;
-        hideOverlay();
-        showOverlay(message || "no se pudo iniciar el emulador");
-        bootSub.textContent = message;
+        showOverlay(message || "no se pudo iniciar la máquina");
     }
 
     if (typeof WebAssembly !== "object") {
@@ -96,7 +74,7 @@
 
     window.saveiro = emulator;
 
-    /* el ratón del escritorio gráfico necesita el adaptador activo */
+    /* el escritorio necesita el adaptador de ratón de v86 */
     emulator.mouse_set_status(true);
 
     emulator.add_listener("emulator-loaded", function () {
@@ -107,36 +85,20 @@
         fail("no se pudieron descargar los archivos del sistema");
     });
 
-    /* El kernel saluda por el puerto serie: es la señal más fiable de que
-     * la shell está lista. */
+    /* la shell saluda por el puerto serie: señal de que el escritorio ya corre */
+    let seen = "";
     emulator.add_listener("serial0-output-byte", function (byte) {
-        if (byte === 36 /* '$' */) {
+        seen = (seen + String.fromCharCode(byte)).slice(-64);
+        if (seen.indexOf("saveiro:/$") !== -1) {
             markBooted();
         }
     });
 
-    /* Red de seguridad por si el puerto serie no responde. */
-    setTimeout(markBooted, 7000);
-
-    startUptime();
-
-    function sendCommand(command) {
-        if (!emulator || !booted) {
-            return;
-        }
-        emulator.serial0_send(command + "\n");
-        terminalPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-
-    document.querySelectorAll(".chip").forEach(function (chip) {
-        chip.addEventListener("click", function () {
-            sendCommand(chip.getAttribute("data-cmd"));
-        });
-    });
+    /* red de seguridad */
+    setTimeout(markBooted, 9000);
 
     document.getElementById("btnRestart").addEventListener("click", function () {
         booted = false;
-        startedAt = 0;
         setStatus("reiniciando");
         showOverlay("reiniciando la máquina…");
         try {
@@ -148,18 +110,19 @@
         setTimeout(function () {
             setStatus("arrancando");
         }, 600);
-        setTimeout(markBooted, 7000);
+        setTimeout(markBooted, 9000);
     });
 
     document.getElementById("btnFullscreen").addEventListener("click", function () {
         if (document.fullscreenElement) {
             document.exitFullscreen();
-        } else if (terminalPanel.requestFullscreen) {
-            terminalPanel.requestFullscreen();
+        } else if (screen.requestFullscreen) {
+            screen.requestFullscreen();
         }
     });
 
-    terminalPanel.addEventListener("click", function () {
+    /* que el teclado llegue siempre a la máquina */
+    screen.addEventListener("click", function () {
         window.focus();
     });
 })();

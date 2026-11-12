@@ -6,6 +6,7 @@
 #define PS2_DATA   0x60
 
 #define STATUS_OUTPUT_FULL 0x01
+#define STATUS_AUX_DATA    0x20
 #define STATUS_INPUT_FULL  0x02
 
 static uint8_t packet[3];
@@ -16,6 +17,7 @@ static uint8_t buttons;
 static bool  updated;
 static bool  detected;
 static uint32_t packet_count;
+static bool click_pending;
 
 static bool wait_input_empty(void)
 {
@@ -66,6 +68,7 @@ void mouse_init(void)
     buttons = 0;
     updated = false;
     packet_count = 0;
+    click_pending = false;
 
     /* Durante la inicializacion el controlador devuelve ACK y el byte de
      * configuracion por el mismo puerto: con las interrupciones de teclado y
@@ -113,37 +116,67 @@ void mouse_init(void)
     pic_unmask(12);
 }
 
+static void mouse_drain(void)
+{
+    int guard;
+
+    /* El controlador puede tener varios bytes esperando: se leen todos los
+     * del puerto auxiliar (bit 5 del estado) y se dejan los del teclado. */
+    for (guard = 0; guard < 8; guard++) {
+        uint8_t status = inb(PS2_STATUS);
+        uint8_t byte;
+
+        if (!(status & STATUS_OUTPUT_FULL))
+            break;
+
+        if (!(status & STATUS_AUX_DATA))
+            break;
+
+        byte = inb(PS2_DATA);
+
+        /* ACK / BAT: no forman parte de ningun paquete */
+        if (byte == 0xFA || byte == 0xAA) {
+            packet_index = 0;
+            continue;
+        }
+
+        /* el primer byte de un paquete siempre lleva el bit 3 a 1 */
+        if (packet_index == 0 && (byte & 0x08) == 0)
+            continue;
+
+        packet[packet_index++] = byte;
+
+        if (packet_index < 3)
+            continue;
+
+        packet_index = 0;
+
+        {
+            int dx = (int)(int8_t)packet[1];
+            int dy = -(int)(int8_t)packet[2];
+            uint8_t next_buttons = (uint8_t)(packet[0] & 0x07);
+
+            accumulated_dx += dx;
+            accumulated_dy += dy;
+
+            if ((next_buttons & 0x01) && !(buttons & 0x01))
+                click_pending = true;
+
+            buttons = next_buttons;
+            updated = true;
+            packet_count++;
+        }
+    }
+}
+
 void mouse_irq(void)
 {
-    uint8_t byte = inb(PS2_DATA);
+    mouse_drain();
+}
 
-    /* ACK / BAT: no forman parte de ningun paquete */
-    if (byte == 0xFA || byte == 0xAA) {
-        packet_index = 0;
-        return;
-    }
-
-    /* el primer byte de un paquete siempre lleva el bit 3 a 1 */
-    if (packet_index == 0 && (byte & 0x08) == 0)
-        return;
-
-    packet[packet_index++] = byte;
-
-    if (packet_index < 3)
-        return;
-
-    packet_index = 0;
-
-    {
-        int dx = (int)(int8_t)packet[1];
-        int dy = -(int)(int8_t)packet[2];
-
-        accumulated_dx += dx;
-        accumulated_dy += dy;
-        buttons = (uint8_t)(packet[0] & 0x07);
-        updated = true;
-        packet_count++;
-    }
+void mouse_poll(void)
+{
+    mouse_drain();
 }
 
 bool mouse_read(mouse_event_t *event)
@@ -162,6 +195,14 @@ bool mouse_read(mouse_event_t *event)
     updated = false;
 
     return true;
+}
+
+bool mouse_take_click(void)
+{
+    bool pending = click_pending;
+
+    click_pending = false;
+    return pending;
 }
 
 bool mouse_detected(void)

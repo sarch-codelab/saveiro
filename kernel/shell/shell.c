@@ -14,7 +14,6 @@
 #include <io.h>
 #include <gfx.h>
 #include <gui.h>
-#include <mouse.h>
 
 #define LINE_MAX 128
 
@@ -41,10 +40,10 @@ static void cmd_uptime(int argc, char **argv);
 static void cmd_ticks(int argc, char **argv);
 static void cmd_syscall(int argc, char **argv);
 static void cmd_test(int argc, char **argv);
+static void cmd_win(int argc, char **argv);
+static void cmd_mouseto(int argc, char **argv);
 static void cmd_reboot(int argc, char **argv);
 static void cmd_halt(int argc, char **argv);
-static void cmd_gui(int argc, char **argv);
-static void cmd_mouse(int argc, char **argv);
 
 static const command_t commands[] = {
     { "help",    "muestra esta ayuda",                    cmd_help },
@@ -65,10 +64,10 @@ static const command_t commands[] = {
     { "ticks",   "ticks del temporizador (100 Hz)",       cmd_ticks },
     { "syscall", "prueba las llamadas int 0x80",          cmd_syscall },
     { "test",    "ejecuta las autopruebas del kernel",    cmd_test },
+    { "win",     "lista las ventanas del escritorio",     cmd_win },
+    { "mouseto", "mueve el puntero: mouseto X Y",         cmd_mouseto },
     { "reboot",  "reinicia la maquina",                   cmd_reboot },
     { "halt",    "detiene el sistema",                    cmd_halt },
-    { "gui",     "abre el escritorio grafico 800x600",    cmd_gui },
-    { "mouse",   "estado del raton PS/2",                 cmd_mouse },
 };
 
 #define COMMAND_COUNT ((int)(sizeof(commands) / sizeof(commands[0])))
@@ -101,9 +100,17 @@ static void prompt(void)
 static int read_line(char *buffer, int cap)
 {
     int length = 0;
+    int echo = 1;
 
     for (;;) {
         int c = input_getchar();
+
+        /* una linea que empieza por Ctrl-A no se muestra: la usan las
+         * herramientas automaticas para no ensuciar el terminal */
+        if (c == 1 && length == 0) {
+            echo = 0;
+            continue;
+        }
 
         if (c == '\n') {
             kputc('\n');
@@ -121,7 +128,8 @@ static int read_line(char *buffer, int cap)
 
         if (c >= 32 && c < 127 && length < cap - 1) {
             buffer[length++] = (char)c;
-            kputc((char)c);
+            if (echo)
+                kputc((char)c);
         }
     }
 }
@@ -553,6 +561,24 @@ static void cmd_test(int argc, char **argv)
     kprintf("%s\n\n", tests_fail == 0 ? "PASS" : "FAIL");
 }
 
+static void cmd_mouseto(int argc, char **argv)
+{
+    if (argc < 3) {
+        kprintf("uso: mouseto X Y\n");
+        return;
+    }
+
+    gui_mouse_warp(atoi(argv[1]), atoi(argv[2]));
+}
+
+static void cmd_win(int argc, char **argv)
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    gui_list_windows();
+}
+
 static void cmd_reboot(int argc, char **argv)
 {
     UNUSED(argc);
@@ -565,43 +591,6 @@ static void cmd_reboot(int argc, char **argv)
 
     for (;;)
         hlt();
-}
-
-static void cmd_gui(int argc, char **argv)
-{
-    UNUSED(argc);
-    UNUSED(argv);
-
-    if (gui_is_active()) {
-        kprintf("gui: el escritorio ya esta en marcha\n");
-        return;
-    }
-
-    if (gfx_init(800, 600) < 0) {
-        kprintf("gui: el adaptador no soporta el modo 800x600x8 lineal\n");
-        return;
-    }
-
-    gui_start();
-
-    kprintf("Escritorio iniciado. Mueve el raton y usa el teclado.\n");
-    kprintf("ESC vuelve al modo texto.\n");
-    con_reset_color();
-
-    /* La sesion grafica continua en este hilo: la shell usa el terminal
-     * de la ventana mientras se muestra el escritorio. */
-    shell_run();
-}
-
-
-static void cmd_mouse(int argc, char **argv)
-{
-    UNUSED(argc);
-    UNUSED(argv);
-
-    kprintf("raton: %s, paquetes: %u\n",
-            mouse_detected() ? "detectado" : "sin respuesta",
-            mouse_packets());
 }
 
 static void cmd_halt(int argc, char **argv)

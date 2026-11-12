@@ -13,9 +13,11 @@ typedef struct {
 
 void mouse_init(void);
 void mouse_irq(void);
+void mouse_poll(void);   /* lee bytes pendientes sin esperar a la IRQ */
 
 /* Consume los movimientos acumulados. Devuelve false si no hubo nada. */
 bool mouse_read(mouse_event_t *event);
+bool mouse_take_click(void);   /* true una vez por cada pulsacion */
 bool mouse_detected(void);
 uint32_t mouse_packets(void);
 

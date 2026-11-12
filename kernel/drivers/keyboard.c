@@ -69,8 +69,16 @@ void keyboard_init(void)
 
 void keyboard_irq(void)
 {
-    uint8_t scancode = inb(0x60);
+    uint8_t status = inb(0x64);
+    uint8_t scancode;
     char c;
+
+    /* El 8042 comparte el puerto 0x60 con el raton: si el byte pendiente es
+     * auxiliar (bit 5) no es nuestro, lo consume el driver del raton. */
+    if (!(status & 0x01) || (status & 0x20))
+        return;
+
+    scancode = inb(0x60);
 
     if (scancode == 0xE0) {
         extended = true;
