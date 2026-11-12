@@ -17,7 +17,7 @@ KERNEL_S    := $(shell find kernel -name '*.S')
 KERNEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(KERNEL_C)) \
                $(patsubst %.S,$(BUILD)/%.o,$(KERNEL_S))
 
-.PHONY: all clean image web serve test run
+.PHONY: all clean image web serve test run shots
 
 all: $(BUILD)/saveiro.img
 
@@ -72,6 +72,13 @@ serve: web
 # Arranque nativo, si tienes QEMU instalado
 run: $(BUILD)/saveiro.img
 	qemu-system-i386 -fda $(BUILD)/saveiro.img -boot a
+
+# Capturas de pantalla para la documentación (requiere Pillow)
+shots: $(BUILD)/saveiro.img v86-deps
+	node tools/screenshot.mjs $(BUILD)/screen-help.json help
+	python3 tools/render-screen.py $(BUILD)/screen-help.json $(BUILD)/help.png
+	node tools/screenshot.mjs $(BUILD)/screen-test.json test
+	python3 tools/render-screen.py $(BUILD)/screen-test.json $(BUILD)/test.png
 
 test: $(BUILD)/saveiro.img v86-deps
 	node tools/v86-check.mjs

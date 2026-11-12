@@ -16,6 +16,10 @@ navegador gracias a [v86](https://github.com/copy/v86).
  |____/ \__,_| \_/ \___||_||_|  \___/   \___/|____/
 ```
 
+| La shell y la barra de estado en vivo | Las 17 autopruebas del kernel |
+|---|---|
+| ![Comandos](docs/comandos.png) | ![Autopruebas](docs/autopruebas.png) |
+
 ---
 
 ## Demo en el navegador
