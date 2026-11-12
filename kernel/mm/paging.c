@@ -30,6 +30,20 @@ void paging_init(void)
     __asm__ volatile("movl %0, %%cr0" : : "r"(cr0));
 }
 
+void paging_map_4mb(uint32_t phys)
+{
+    uint32_t index = phys >> 22;
+
+    if (index >= 1024)
+        return;
+
+    page_directory[index] = (phys & 0xFFC00000u) | 0x83u;
+
+    /* refrescar la TLB */
+    __asm__ volatile("movl %%cr3, %%eax\n"
+                     "movl %%eax, %%cr3" : : : "eax");
+}
+
 uint32_t paging_directory_phys(void)
 {
     return (uint32_t)page_directory;

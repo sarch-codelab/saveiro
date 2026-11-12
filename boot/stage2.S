@@ -52,6 +52,31 @@ e820_next:
     jz      e820_done
     jmp     e820_loop
 e820_done:
+    /* --- copiar la fuente 8xN del BIOS a 0x6000 ---
+     * int 10h AX=1130 BH=03 devuelve ES:BP apuntando a los 256 glifos
+     * (CX bytes por glifo, normalmente 16). La usaremos para dibujar
+     * texto en modo gráfico. */
+    movw    $0x1130, %ax
+    movb    $0x03, %bh
+    int     $0x10
+    movb    $8, 0x5500           /* bytes por glifo (fuente 8x8) */
+    movb    $8, 0x5501           /* ancho */
+    movb    $8, 0x5502           /* alto */
+font_copy:
+    pushw   %ds
+    pushw   %es
+    popw    %ds
+    movw    %bp, %si
+    movw    $0x0600, %ax         /* ES = 0x6000 lineal */
+    movw    %ax, %es
+    xorw    %di, %di
+    movw    $2048, %cx           /* 256 glifos de 8 bytes */
+    cld
+    rep movsb
+    popw    %ds
+font_done:
+    xorw    %ax, %ax
+    movw    %ax, %es
     movb    $'.', %al
     call    putc
 

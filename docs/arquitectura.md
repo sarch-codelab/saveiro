@@ -64,11 +64,13 @@ shell_run                     bucle prompt → leer línea → ejecutar
 | `0x00005000`–`0x0000508F` | — | `boot_info_t`: contador + entradas E820 |
 | `0x00007C00` | 512 B | sector de arranque mientras corre |
 | `0x00007E00` | 2 KiB | segunda etapa |
-| `0x00010000`–`~0x00015500` | ~21 KiB | kernel (`.text`, `.rodata`, `.data`, `.bss`) |
+| `0x00010000`–`~0x00018000` | ~32 KiB | kernel (`.text`, `.rodata`, `.data`, `.bss`) |
+| `0x00006000`–`0x00006800` | 2 KiB | fuente 8×8 que copia la etapa 2 desde el BIOS |
 | `0x00080000`–`0x00090000` | 64 KiB | pila del kernel |
 | `0x000B8000` | 4 KiB | texto VGA |
 | `0x00100000`–`0x02000000` | 31 MiB | marcos libres (PMM) |
-| `0x00400000`–`0x00800000` | 4 MiB | heap del kernel |
+| `0x00400000`–`0x00800000` | 4 MiB | heap del kernel (incluye el *back buffer* de 480 000 B) |
+| `0xE0000000` | 480 000 B | framebuffer lineal SVGA (BAR0, visible con `gui`) |
 
 `pmm_init` marca todo como usado, libera las regiones `type == 1` del mapa E820 y vuelve
 a reservar: primer MiB, `boot_info`, el kernel hasta `_kernel_end` y el heap.
@@ -198,10 +200,97 @@ la primera vez que se escribe. Sin directorios, sin permisos, sin persistencia.
 
 ---
 
-## 10. Depuración
+## 10. Escritorio gráfico
+
+### 10.1 Del modo texto al framebuffer
+
+`gfx_init(800, 600)` busca en el bus PCI el dispositivo `1234:1111` (la tarjeta SVGA de
+QEMU/v86), programa el **dispositivo Bochs VBE** por los puertos `0x1CE` (índice) y `0x1CF`
+(dato):
+
+| Índice | Valor |
+|---|---|
+| 1 | ancho (800) |
+| 2 | alto (600) |
+| 3 | 8 bits por píxel |
+| 4 | `0x41` = habilitar + framebuffer lineal |
+
+Después lee el BAR0 de la configuración PCI, mapea con `paging_map_4mb` todas las páginas
+de 4 MiB que cubren los 480 000 bytes del framebuffer y reserva con `kmalloc` un *back
+buffer* del mismo tamaño. **Todo el dibujo se hace en el back buffer**; `gfx_flush(x, y, w,
+h)` copia el rectángulo a la tarjeta y `gfx_flush_all()` repinta la pantalla completa.
+
+Como en modo SVGA la ventana bancarizada se solapa con `0xB8000`, al entrar se desactiva la
+consola de texto (`vga_set_enabled(false)`) para que sus escrituras no ensucien el
+framebuffer. Al salir, `gfx_shutdown()` vuelve a poner el índice 4 a `0` —con lo que la
+tarjeta regresa al modo texto del BIOS— y reactiva la consola VGA.
+
+La paleta es fija: 24 entradas de la DAC con los colores de la interfaz (fondo, paneles,
+bordes, verde, cian, ámbar, rojo, blanco…). La fuente son los 2 KiB de glifos 8×8 que la
+etapa 2 copia del BIOS a `0x00006000` antes de entrar en modo protegido.
+
+### 10.2 Consola abstracta
+
+`include/console.h` define una interfaz mínima:
+
+```c
+typedef struct console {
+    int cols, rows;
+    void *data;
+    void (*putc)(struct console *c, char ch);
+    void (*clear)(struct console *c);
+    void (*set_color)(struct console *c, uint8_t fg, uint8_t bg);
+    void (*status)(struct console *c, const char *text);
+} console_t;
+```
+
+Hay dos implementaciones: la de texto VGA (`vga_console()`) y la de la ventana del
+escritorio (`terminal_console()`), que guarda una rejilla de 72×56 celdas con color por
+celda y solo marca como sucias las filas que cambian. `kputc`, `kprintf` y la barra de
+estado hablan con `console_use()` y no saben en qué modo están, así que la shell, las tareas
+y las autopruebas funcionan igual dentro de una ventana.
+
+### 10.3 Teclado y ratón
+
+- El teclado PS/2 sigue siendo el mismo; además de las teclas normales, el IRQ1 guarda en un
+  anillo aparte `F1`, `F2`, `F3` y `ESC`.
+- `input_set_source(fn)` permite que `input_getchar()` lea de la cola del terminal gráfico en
+  vez del teclado y del puerto serie. Así el bucle de la shell no cambia.
+- El ratón se inicializa con las interrupciones enmascaradas: se manda `0xA8` (activar puerto
+  auxiliar), se lee la configuración con `0x20`, se reescribe con `0x60` poniendo el bit de
+  IRQ12, y luego `0xF6` + `0xF4` al propio ratón. Los *ACK* (`0xFA`) llegan por el mismo
+  puerto, por eso se leen por sondeo antes de desenmascarar IRQ12 (y la cascada IRQ2).
+- `mouse_irq()` reensambla paquetes de 3 bytes (el primero siempre lleva el bit 3 a 1),
+  descarta ACK y acumula `dx`, `dy` y botones. `mouse_read()` los consume desde el
+  escritorio.
+
+### 10.4 Gestor de ventanas
+
+Todo vive en `kernel/gui/gui.c` (un solo fichero, sin compositor):
+
+- tres ventanas de geometría fija (terminal, sistema y archivos) con barra de título, borde,
+  sombra y tres puntos decorativos; la ventana con foco se pinta con el título resaltado;
+- la tarea `gui` corre en el planificador: en cada vuelta consume el ratón, drena el teclado,
+  repinta las filas sucias del terminal, hace parpadear el cursor de texto y cada 50 ticks
+  actualiza el reloj y el panel del sistema;
+- el puntero se dibuja directamente en el framebuffer y, antes de cualquier repintado, se
+  restaura el rectángulo correspondiente del *back buffer* (`cursor_hide` / `cursor_show`);
+- los clics se resuelven por coordenadas: botones de la barra superior (`F1`/`F2`/`F3`
+  también), foco de ventana y filas de la lista de archivos, que escriben `cat NOMBRE` en la
+  cola de entrada del terminal;
+- `ESC` llama a `gui_leave()`: apaga el modo SVGA, devuelve la consola al texto, mata la
+  tarea del escritorio y deja la shell donde estaba.
+
+---
+
+## 11. Depuración
 
 - Todo lo que se imprime por consola se duplica en **COM1** (115200 8N1), de ahí que
   `make test` pueda leer la sesión completa.
 - La shell acepta entrada por teclado PS/2 **o** por el puerto serie, lo que permite
   automatizar comandos desde Node.
 - `test` cubre asignador de marcos, heap, strings, RAMFS, temporizador y planificador.
+- `make test` incluye además comprobaciones del escritorio: modo 800×600×8, llegada de
+  paquetes del ratón por IRQ12 y vuelta al modo texto con `ESC`.
+- `make shots-gui` vuelca el framebuffer SVGA y la paleta a `build/gui-screen.raw` y genera
+  `docs/escritorio.png` con `tools/render-framebuffer.py`.

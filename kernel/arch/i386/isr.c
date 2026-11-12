@@ -4,6 +4,7 @@
 #include <pic.h>
 #include <pit.h>
 #include <keyboard.h>
+#include <mouse.h>
 #include <task.h>
 #include <syscall.h>
 
@@ -96,6 +97,9 @@ uint32_t isr_dispatch(regs_t *r)
 
         if (irq == 1)
             keyboard_irq();
+
+        if (irq == 12)
+            mouse_irq();
 
         if (irq != 7)
             pic_eoi(irq);

@@ -12,6 +12,9 @@
 #include <pit.h>
 #include <rtc.h>
 #include <io.h>
+#include <gfx.h>
+#include <gui.h>
+#include <mouse.h>
 
 #define LINE_MAX 128
 
@@ -40,6 +43,8 @@ static void cmd_syscall(int argc, char **argv);
 static void cmd_test(int argc, char **argv);
 static void cmd_reboot(int argc, char **argv);
 static void cmd_halt(int argc, char **argv);
+static void cmd_gui(int argc, char **argv);
+static void cmd_mouse(int argc, char **argv);
 
 static const command_t commands[] = {
     { "help",    "muestra esta ayuda",                    cmd_help },
@@ -62,33 +67,35 @@ static const command_t commands[] = {
     { "test",    "ejecuta las autopruebas del kernel",    cmd_test },
     { "reboot",  "reinicia la maquina",                   cmd_reboot },
     { "halt",    "detiene el sistema",                    cmd_halt },
+    { "gui",     "abre el escritorio grafico 800x600",    cmd_gui },
+    { "mouse",   "estado del raton PS/2",                 cmd_mouse },
 };
 
 #define COMMAND_COUNT ((int)(sizeof(commands) / sizeof(commands[0])))
 
 void print_banner(void)
 {
-    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+    con_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     kprintf("\n");
     kprintf("  ____                   _                ___  ____  \n");
     kprintf(" / ___|  __ ___   _____ (_) _ __ ___    / _ \\/ ___| \n");
     kprintf(" \\___ \\ / _` \\ \\ / / _ \\| || '__/ _ \\  | | | \\___ \\ \n");
     kprintf("  ___) | (_| |\\ V /  __/| || | | (_) | | |_| |___) |\n");
     kprintf(" |____/ \\__,_| \\_/ \\___||_||_|  \\___/   \\___/|____/ \n");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
+    con_set_color(VGA_WHITE, VGA_BLACK);
     kprintf("        SaveiroOS 0.1  -  i386  -  desde cero\n\n");
-    vga_reset_color();
+    con_reset_color();
 }
 
 static void prompt(void)
 {
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    con_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
     kputs("saveiro");
-    vga_set_color(VGA_DARK_GREY, VGA_BLACK);
+    con_set_color(VGA_DARK_GREY, VGA_BLACK);
     kputs(":/");
-    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+    con_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     kputs("$ ");
-    vga_reset_color();
+    con_reset_color();
 }
 
 static int read_line(char *buffer, int cap)
@@ -148,16 +155,16 @@ static void cmd_help(int argc, char **argv)
     UNUSED(argc);
     UNUSED(argv);
 
-    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+    con_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     kprintf("\nComandos disponibles\n");
-    vga_set_color(VGA_DARK_GREY, VGA_BLACK);
+    con_set_color(VGA_DARK_GREY, VGA_BLACK);
     kprintf("--------------------\n");
-    vga_reset_color();
+    con_reset_color();
 
     for (i = 0; i < COMMAND_COUNT; i++) {
-        vga_set_color(VGA_YELLOW, VGA_BLACK);
+        con_set_color(VGA_YELLOW, VGA_BLACK);
         kprintf("  %-9s", commands[i].name);
-        vga_reset_color();
+        con_reset_color();
         kprintf(" %s\n", commands[i].help);
     }
     kprintf("\n");
@@ -196,7 +203,7 @@ static void cmd_clear(int argc, char **argv)
     UNUSED(argc);
     UNUSED(argv);
 
-    vga_clear();
+    con_clear();
     task_update_status();
 }
 
@@ -233,9 +240,9 @@ static void cmd_ps(int argc, char **argv)
     UNUSED(argc);
     UNUSED(argv);
 
-    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+    con_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
     kprintf("\n  ID  NOMBRE           ESTADO    TICKS   TRABAJO\n");
-    vga_reset_color();
+    con_reset_color();
 
     for (i = 0; i < TASK_MAX; i++) {
         const task_t *t = task_at(i);
@@ -456,15 +463,15 @@ static void check(bool condition, const char *name)
 {
     if (condition) {
         tests_pass++;
-        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        con_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
         kputs("  [ ok ] ");
-        vga_reset_color();
+        con_reset_color();
         kprintf("%s\n", name);
     } else {
         tests_fail++;
-        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        con_set_color(VGA_LIGHT_RED, VGA_BLACK);
         kputs("  [fallo] ");
-        vga_reset_color();
+        con_reset_color();
         kprintf("%s\n", name);
     }
 }
@@ -560,6 +567,43 @@ static void cmd_reboot(int argc, char **argv)
         hlt();
 }
 
+static void cmd_gui(int argc, char **argv)
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    if (gui_is_active()) {
+        kprintf("gui: el escritorio ya esta en marcha\n");
+        return;
+    }
+
+    if (gfx_init(800, 600) < 0) {
+        kprintf("gui: el adaptador no soporta el modo 800x600x8 lineal\n");
+        return;
+    }
+
+    gui_start();
+
+    kprintf("Escritorio iniciado. Mueve el raton y usa el teclado.\n");
+    kprintf("ESC vuelve al modo texto.\n");
+    con_reset_color();
+
+    /* La sesion grafica continua en este hilo: la shell usa el terminal
+     * de la ventana mientras se muestra el escritorio. */
+    shell_run();
+}
+
+
+static void cmd_mouse(int argc, char **argv)
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    kprintf("raton: %s, paquetes: %u\n",
+            mouse_detected() ? "detectado" : "sin respuesta",
+            mouse_packets());
+}
+
 static void cmd_halt(int argc, char **argv)
 {
     UNUSED(argc);
@@ -597,9 +641,9 @@ void shell_run(void)
 {
     char line[LINE_MAX];
 
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    kprintf("Escribe 'help' para ver los comandos, 'about' para la ficha tecnica.\n");
-    vga_reset_color();
+    con_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    kprintf("Escribe 'help' para ver los comandos.\n");
+    con_reset_color();
 
     for (;;) {
         prompt();

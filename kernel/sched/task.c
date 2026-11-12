@@ -207,7 +207,7 @@ void task_update_status(void)
               heap_used_bytes() / 1024u, task_count(),
               now.hour, now.minute, now.second, timer_uptime());
 
-    vga_status_bar(buf);
+    con_status(buf);
 }
 
 void sched_lock(void)

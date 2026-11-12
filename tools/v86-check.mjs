@@ -119,7 +119,7 @@ const watchdog = setTimeout(() => {
     console.error("\nTiempo de espera agotado. Última salida serie:\n");
     console.error(serial);
     cleanup(1);
-}, 90000);
+}, 150000);
 
 try {
     console.log("SaveiroOS · prueba de arranque en v86\n");
@@ -155,6 +155,33 @@ try {
     output = await command("write notas hola desde la prueba", /bytes anadidos a notas[\s\S]*saveiro:\/\$ /, "write");
     output = await command("cat notas", /hola desde la prueba[\s\S]*saveiro:\/\$ /, "cat notas");
     check(/hola desde la prueba/.test(output), "RAMFS escribe y lee datos nuevos");
+
+    /* --- escritorio gráfico --- */
+    serial = "";
+    emulator.serial0_send("gui\n");
+    await waitFor(/Escritorio iniciado/, 15000, "el escritorio gráfico");
+    const vga = emulator.v86.cpu.devices.vga;
+    check(!!vga.svga_enabled && vga.svga_width === 800 && vga.svga_height === 600,
+        "el adaptador entra en modo 800x600x8 lineal");
+    check(vga.graphical_mode === true, "la salida de vídeo es gráfica, no texto");
+
+    /* el ratón PS/2 mueve el puntero (IRQ12) */
+    emulator.bus.send("mouse-delta", [40, 20]);
+    emulator.bus.send("mouse-delta", [30, 10]);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    output = await command("mouse", /raton: detectado, paquetes: \d+[\s\S]*saveiro:\/\$ /, "mouse");
+    check(/raton: detectado, paquetes: [1-9]\d*/.test(output), "el ratón PS/2 entrega paquetes por IRQ12");
+
+    check(serial.includes("saveiro:/$"), "el terminal de la ventana sigue atendiendo la shell");
+
+    /* ESC vuelve al modo texto */
+    serial = "";
+    emulator.bus.send("keyboard-code", 0x01);
+    await waitFor(/Saliste del escritorio/, 8000, "la vuelta al modo texto");
+    check(vga.graphical_mode === false, "ESC devuelve la consola al modo texto");
+
+    output = await command("ticks", /ticks: \d+[\s\S]*saveiro:\/\$ /, "ticks tras salir");
+    check(/PIT a 100 Hz/.test(output), "la shell sigue viva tras cerrar el escritorio");
 
     check(!/PANIC|EXCEPCION/.test(serial), "no hubo pánicos ni excepciones");
 

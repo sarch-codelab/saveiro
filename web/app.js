@@ -88,7 +88,6 @@
             scale: 1,
             autostart: true,
             disable_speaker: true,
-            disable_mouse: true,
         });
     } catch (error) {
         fail("error al crear la máquina virtual: " + error.message);
@@ -96,6 +95,9 @@
     }
 
     window.saveiro = emulator;
+
+    /* el ratón del escritorio gráfico necesita el adaptador activo */
+    emulator.mouse_set_status(true);
 
     emulator.add_listener("emulator-loaded", function () {
         bootSub.textContent = "ejecutando el sector de arranque…";

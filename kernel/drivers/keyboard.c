@@ -31,6 +31,12 @@ static const char keymap_shift[128] = {
 static volatile uint8_t buffer[KBD_BUF_SIZE];
 static volatile int head;
 static volatile int tail;
+
+static volatile uint8_t special[16];
+static volatile int special_head;
+static volatile int special_tail;
+
+static int (*input_source)(void);
 static bool shift;
 static bool caps;
 static bool extended;
@@ -54,6 +60,8 @@ void keyboard_init(void)
 
     head = 0;
     tail = 0;
+    special_head = 0;
+    special_tail = 0;
     shift = false;
     caps = false;
     extended = false;
@@ -86,6 +94,26 @@ void keyboard_irq(void)
         caps = !caps;
         return;
     }
+
+    if (scancode == 0x3B || scancode == 0x3C || scancode == 0x3D) {
+        int next = (special_head + 1) % 16;
+
+        if (next != special_tail) {
+            special[special_head] = (uint8_t)(scancode - 0x3B + 1);
+            special_head = next;
+        }
+        return;
+    }
+
+    if (scancode == 0x01) {
+        int next = (special_head + 1) % 16;
+
+        if (next != special_tail) {
+            special[special_head] = 27;
+            special_head = next;
+        }
+        return;
+    }
     if (scancode & 0x80)
         return;
 
@@ -113,8 +141,35 @@ int keyboard_poll(void)
     return (uint8_t)c;
 }
 
+int keyboard_poll_special(void)
+{
+    int value;
+
+    if (special_tail == special_head)
+        return -1;
+
+    value = special[special_tail];
+    special_tail = (special_tail + 1) % 16;
+
+    return value;
+}
+
+void input_set_source(int (*source)(void))
+{
+    input_source = source;
+}
+
 int input_getchar(void)
 {
+    if (input_source) {
+        int c;
+
+        while ((c = input_source()) < 0)
+            __asm__ volatile("sti; hlt");
+
+        return c;
+    }
+
     for (;;) {
         int c = keyboard_poll();
 

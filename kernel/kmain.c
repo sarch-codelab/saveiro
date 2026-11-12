@@ -28,6 +28,7 @@ static void log_ok(const char *text)
 void kmain(boot_info_t *bi)
 {
     vga_init();
+    console_init(vga_console());
     serial_init();
 
     print_banner();

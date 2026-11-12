@@ -35,5 +35,7 @@ void vga_set_color(uint8_t fg, uint8_t bg);
 void vga_reset_color(void);
 void vga_status_bar(const char *text);
 void vga_move_cursor(int row, int col);
+struct console *vga_console(void);
+void vga_set_enabled(bool on);
 
 #endif
