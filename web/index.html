@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SaveiroOS — un sistema operativo desde cero</title>
+<meta name="description" content="SaveiroOS: kernel x86 de 32 bits con bootloader propio, paginación, RAMFS y multitarea. Arranca en tu navegador.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2306100c'/><text x='16' y='23' font-family='monospace' font-size='19' fill='%2346f08a' text-anchor='middle'>S</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="glow glow-a"></div>
+<div class="glow glow-b"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">S</div>
+    <div class="brand-text">
+      <h1>SaveiroOS <span class="version">0.1</span></h1>
+      <p>sistema operativo x86 escrito desde cero</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="pill" id="statusPill"><span class="dot" id="statusDot"></span><span id="statusText">arrancando</span></div>
+    <a class="ghost-link" href="https://github.com/sarch-codelab/saveiro" target="_blank" rel="noreferrer">código</a>
+  </div>
+</header>
+
+<main class="workspace">
+
+  <section class="terminal-panel" id="terminalPanel">
+    <div class="terminal-chrome">
+      <div class="dots"><i class="dot-red"></i><i class="dot-amber"></i><i class="dot-green"></i></div>
+      <div class="terminal-title">saveiro — tty0 · i386</div>
+      <div class="chrome-actions">
+        <button class="chrome-btn" id="btnFullscreen" type="button" title="Pantalla completa">⛶</button>
+        <button class="chrome-btn wide" id="btnRestart" type="button" title="Reiniciar la máquina">reiniciar</button>
+      </div>
+    </div>
+
+    <div class="screen-shell">
+      <div class="scanlines"></div>
+      <div id="screen_container">
+        <div class="screen-text"></div>
+        <canvas></canvas>
+      </div>
+      <div class="boot-overlay" id="bootOverlay">
+        <div class="spinner"></div>
+        <p class="boot-title">Arrancando SaveiroOS</p>
+        <p class="boot-sub" id="bootSub">cargando el bootloader y el kernel…</p>
+      </div>
+    </div>
+
+    <div class="terminal-footer">
+      <span class="hint"><kbd>clic</kbd> en la pantalla y escribe</span>
+      <span class="sep">/</span>
+      <span class="hint">prueba <code>help</code>, <code>test</code>, <code>ps</code></span>
+      <span class="grow"></span>
+      <span class="hint dim">80×25 · VGA texto</span>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+
+    <div class="card">
+      <h2>Comandos rápidos</h2>
+      <div class="chips">
+        <button class="chip" data-cmd="help">help</button>
+        <button class="chip" data-cmd="about">about</button>
+        <button class="chip" data-cmd="test">test</button>
+        <button class="chip" data-cmd="mem">mem</button>
+        <button class="chip" data-cmd="ls">ls</button>
+        <button class="chip" data-cmd="cat README">cat README</button>
+        <button class="chip" data-cmd="spawn 2">spawn 2</button>
+        <button class="chip" data-cmd="ps">ps</button>
+        <button class="chip" data-cmd="syscall">syscall</button>
+        <button class="chip" data-cmd="clear">clear</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Ficha técnica</h2>
+      <dl class="specs">
+        <div><dt>CPU</dt><dd>x86 · 32 bits · modo protegido</dd></div>
+        <div><dt>Arranque</dt><dd>bootloader propio en 2 etapas</dd></div>
+        <div><dt>Memoria</dt><dd>32 MiB · paginación PSE 4 MiB</dd></div>
+        <div><dt>Interrupciones</dt><dd>IDT 256 vectores · PIC · PIT 100 Hz</dd></div>
+        <div><dt>Tareas</dt><dd>round-robin con cambio de contexto</dd></div>
+        <div><dt>Archivos</dt><dd>RAMFS en memoria · 16 nodos</dd></div>
+        <div><dt>Syscalls</dt><dd>puerta <code>int 0x80</code></dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Sesión</h2>
+      <div class="meta-row"><span>Tiempo encendido</span><strong id="uptime">00:00</strong></div>
+      <div class="meta-row"><span>Emulación</span><strong>v86 / WebAssembly</strong></div>
+      <div class="meta-row"><span>Imagen</span><strong>disquete 1.44 MB</strong></div>
+      <div class="meta-row"><span>Estado</span><strong id="metaState">arrancando</strong></div>
+    </div>
+
+    <div class="card">
+      <h2>Compilar</h2>
+      <pre class="code"><code>git clone https://github.com/sarch-codelab/saveiro
+cd saveiro
+make image     <span class="c"># bootloader + kernel</span>
+make web       <span class="c"># copia los assets</span>
+make test      <span class="c"># autopruebas en v86</span></code></pre>
+      <p class="note">Sin GRUB, sin Linux, sin libc: solo gcc, gas y ~2000 líneas propias.</p>
+    </div>
+
+  </aside>
+</main>
+
+<footer class="page-footer">
+  <span>SaveiroOS 0.1</span>
+  <span class="sep">·</span>
+  <span>hecho desde cero</span>
+  <span class="grow"></span>
+  <span class="dim">kernel freestanding · sin dependencias externas</span>
+</footer>
+
+<script src="assets/libv86.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

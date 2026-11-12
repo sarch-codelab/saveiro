@@ -1,0 +1,7 @@
+build/
+web/assets/
+web/node_modules/
+package-lock.json
+web/package-lock.json
+*.o
+*.elf

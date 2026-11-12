@@ -1,0 +1,10 @@
+{
+  "name": "saveiro-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interfaz web de SaveiroOS: arranca el sistema en el navegador con v86",
+  "type": "module",
+  "dependencies": {
+    "v86": "^0.5.473"
+  }
+}
